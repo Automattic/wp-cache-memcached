@@ -6,6 +6,7 @@
 
 	<exclude-pattern>/\.git/*</exclude-pattern>
 	<exclude-pattern>/vendor/*</exclude-pattern>
+	<exclude-pattern>/stubs/*</exclude-pattern>
 
 	<arg name="basepath" value="."/>
 	<arg name="parallel" value="8"/>
