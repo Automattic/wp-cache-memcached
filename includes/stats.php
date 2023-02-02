@@ -132,9 +132,8 @@ class Stats {
 
 			// Strip off the flush number.
 			$flush_piece = strpos( $value, ':', $offset );
-			$offset      = false === $flush_piece ? $offset : $offset + $flush_piece + 1;
-
-			$keys[ $index ] = substr( $value, $offset );
+			$start       = false === $flush_piece ? 0 : $flush_piece;
+			$keys[ $index ] = substr( $value, $start + 1 );
 		}
 
 		if ( 1 === count( $keys ) ) {

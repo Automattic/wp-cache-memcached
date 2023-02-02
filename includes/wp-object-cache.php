@@ -797,9 +797,17 @@ class WP_Object_Cache {
 		$values  = $this->adapter->get_with_redundancy( $key );
 		$elapsed = $this->timer_stop();
 
-		// TODO: fixup
-		$this->group_ops_stats( 'get_flush_number', $key, $group, null, $elapsed, 'not_in_memcache' );
-		$this->group_ops_stats( 'get_flush_number', $key, $group, $size, $elapsed, 'memcache' );
+		$replication_servers_count = max( count( $this->default_mcs ), 1 );
+		$average_time_elapsed      = $elapsed / $replication_servers_count;
+
+		/** @psalm-suppress MixedAssignment */
+		foreach ( $values as $result ) {
+			if ( false === $result ) {
+				$this->group_ops_stats( 'get_flush_number', $key, $group, null, $average_time_elapsed, 'not_in_memcache' );
+			} else {
+				$this->group_ops_stats( 'get_flush_number', $key, $group, $size, $average_time_elapsed, 'memcache' );
+			}
+		}
 
 		$values = array_map( 'intval', $values );
 		/** @psalm-suppress ArgumentTypeCoercion */
@@ -820,12 +828,13 @@ class WP_Object_Cache {
 			}
 		}
 
-		$this->timer_start();
-		$this->adapter->set_with_redundancy( $key, $max, $expire, $servers_to_update );
-		$elapsed = $this->timer_stop();
+		if ( ! empty( $servers_to_update ) ) {
+			$this->timer_start();
+			$this->adapter->set_with_redundancy( $key, $max, $expire, $servers_to_update );
+			$elapsed = $this->timer_stop();
 
-		// TODO: fixup since it was actually multiple calls
-		$this->group_ops_stats( 'set_flush_number', $key, $group, $size, $elapsed, 'replication_repair' );
+			$this->group_ops_stats( 'set_flush_number', $key, $group, $size, $elapsed, 'replication_repair' );
+		}
 
 		return $max;
 	}
