@@ -102,7 +102,6 @@ class WP_Object_Cache {
 		$this->default_mcs       = $this->adapter->get_default_connections();
 		$this->connection_errors =& $this->adapter->get_connection_errors();
 
-
 		$this->stats_helper = new Stats( $this->key_salt );
 
 		// Also for backwards compatability since these have been public properties.
@@ -405,12 +404,16 @@ class WP_Object_Cache {
 			if ( isset( $this->cache[ $cache_key ] ) && ! $force ) {
 				/** @psalm-suppress MixedAssignment */
 				$return[ $key ] = is_object( $this->cache[ $cache_key ]['value'] ) ? clone $this->cache[ $cache_key ]['value'] : $this->cache[ $cache_key ]['value'];
+
+				$this->group_ops_stats( 'get_local', $cache_key, $group, null, null, 'local' );
 			} elseif ( $this->is_non_persistent_group( $group ) ) {
 				$return[ $key ]             = false;
 				$return_cache[ $cache_key ] = [
 					'value' => false,
 					'found' => false,
 				];
+
+				$this->group_ops_stats( 'get_local', $cache_key, $group, null, null, 'not_in_local' );
 			} else {
 				$uncached_keys[ $key ] = $cache_key;
 			}
@@ -421,11 +424,7 @@ class WP_Object_Cache {
 			$values  = $this->adapter->get_multiple( array_values( $uncached_keys ), $group );
 			$elapsed = $this->timer_stop();
 
-			// TODO: fixup
-			$this->group_ops_stats( 'get_multiple', array_values( $uncached_keys ), $group, null, $elapsed );
-
 			$values = false === $values ? [] : $values;
-
 			foreach ( $uncached_keys as $key => $cache_key ) {
 				$found = array_key_exists( $cache_key, $values );
 				/** @psalm-suppress MixedAssignment */
@@ -438,6 +437,8 @@ class WP_Object_Cache {
 					'found' => $found,
 				];
 			}
+
+			$this->group_ops_stats( 'get_multiple', array_values( $uncached_keys ), $group, $this->get_data_size( array_values( $values ) ), $elapsed );
 		}
 
 		$this->cache = array_merge( $this->cache, $return_cache );
@@ -821,9 +822,6 @@ class WP_Object_Cache {
 			return false;
 		}
 
-		// Replicate to servers not having the max.
-		$expire = 0;
-
 		/** @psalm-var int[] $servers_to_update */
 		$servers_to_update = [];
 		foreach ( $values as $index => $value ) {
@@ -832,12 +830,18 @@ class WP_Object_Cache {
 			}
 		}
 
+		// Replicate to servers not having the max.
 		if ( ! empty( $servers_to_update ) ) {
+			$expire = 0;
+
 			$this->timer_start();
 			$this->adapter->set_with_redundancy( $key, $max, $expire, $servers_to_update );
 			$elapsed = $this->timer_stop();
 
-			$this->group_ops_stats( 'set_flush_number', $key, $group, $size, $elapsed, 'replication_repair' );
+			$average_time_elapsed = $elapsed / count( $servers_to_update );
+			foreach ( $servers_to_update as $updated_server ) {
+				$this->group_ops_stats( 'set_flush_number', $key, $group, $size, $average_time_elapsed, 'replication_repair' );
+			}
 		}
 
 		return $max;
