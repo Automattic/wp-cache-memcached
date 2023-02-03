@@ -86,16 +86,16 @@ class WP_Object_Cache {
 
 		$this->global_prefix = $is_ms || ( defined( 'CUSTOM_USER_TABLE' ) && defined( 'CUSTOM_USER_META_TABLE' ) ) ? '' : $table_prefix;
 		$this->blog_prefix   = (string) ( $is_ms ? $blog_id : $table_prefix );
-		$this->salt_keys( WP_CACHE_KEY_SALT );
 
-		$servers = is_array( $memcached_servers ) ? $memcached_servers : [ 'default' => [ '127.0.0.1:11211' ] ];
+		$use_memcached = defined( 'AUTOMATTIC_MEMCACHED_USE_MEMCACHED_EXTENSION' ) && AUTOMATTIC_MEMCACHED_USE_MEMCACHED_EXTENSION;
 		if ( ! is_null( $adapter ) ) {
 			$this->adapter = $adapter;
 		} else {
-			// Default to using the Memcache extension, as this was the original/default implementation.
-			$use_memcached = defined( 'AUTOMATTIC_MEMCACHED_USE_MEMCACHED_EXTENSION' ) && AUTOMATTIC_MEMCACHED_USE_MEMCACHED_EXTENSION;
+			$servers       = is_array( $memcached_servers ) ? $memcached_servers : [ 'default' => [ '127.0.0.1:11211' ] ];
 			$this->adapter = $use_memcached ? new Memcached_Adapter( $servers ) : new Memcache_Adapter( $servers );
 		}
+
+		$this->salt_keys( WP_CACHE_KEY_SALT, $use_memcached );
 
 		// Backwards compatability as these have been public properties. Ideally we deprecate and remove in the future.
 		$this->mc                = $this->adapter->get_connections();
@@ -989,10 +989,14 @@ class WP_Object_Cache {
 	 * Sets the key salt property.
 	 *
 	 * @param mixed $key_salt
+	 * @param bool $add_mc_prefix
 	 * @return void
 	 */
-	public function salt_keys( $key_salt ) {
-		$this->key_salt = is_string( $key_salt ) && strlen( $key_salt ) ? $key_salt . ':' : '';
+	public function salt_keys( $key_salt, $add_mc_prefix = false ) {
+		$key_salt = is_string( $key_salt ) && strlen( $key_salt ) ? $key_salt : '';
+		$key_salt = $add_mc_prefix ? $key_salt . '_mc' : '';
+
+		$this->key_salt = empty( $key_salt ) ? '' : $key_salt . ':';
 	}
 
 	public function timer_start(): bool {
