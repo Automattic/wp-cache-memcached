@@ -53,13 +53,10 @@ class WP_Object_Cache {
 	public array $cache = [];
 
 	// Stats tracking.
-	public array $stats     = [
-		'get' => 0,
-		'add' => 0,
-	];
-	public array $group_ops = [];
-	public ?int $cache_hits;
-	public ?int $cache_misses;
+	public array $stats                = [];
+	public array $group_ops            = [];
+	public int $cache_hits             = 0;
+	public int $cache_misses           = 0;
 	public float $time_start           = 0;
 	public float $time_total           = 0;
 	public int $size_total             = 0;
@@ -78,13 +75,12 @@ class WP_Object_Cache {
 	 * @global int|numeric-string $blog_id
 	 *
 	 * @param ?Adapter_Interface $adapter Optionally inject the adapter layer, useful for unit testing.
+	 * @psalm-suppress UnsupportedReferenceUsage
 	 */
 	public function __construct( $adapter = null ) {
 		global $blog_id, $table_prefix, $memcached_servers;
 
 		$this->global_groups = [ $this->global_flush_group ];
-		$this->cache_hits    =& $this->stats['get'];
-		$this->cache_misses  =& $this->stats['add'];
 
 		$is_ms = function_exists( 'is_multisite' ) && is_multisite();
 
@@ -102,13 +98,21 @@ class WP_Object_Cache {
 		}
 
 		// Backwards compatability as these have been public properties. Ideally we deprecate and remove in the future.
-		$this->mc          = $this->adapter->get_connections();
-		$this->default_mcs = $this->adapter->get_default_connections();
-		/** @psalm-suppress UnsupportedReferenceUsage */
+		$this->mc                = $this->adapter->get_connections();
+		$this->default_mcs       = $this->adapter->get_default_connections();
 		$this->connection_errors =& $this->adapter->get_connection_errors();
 
 
 		$this->stats_helper = new Stats( $this->key_salt );
+
+		// Also for backwards compatability since these have been public properties.
+		$this->stats                =& $this->stats_helper->stats;
+		$this->group_ops            =& $this->stats_helper->group_ops;
+		$this->time_total           =& $this->stats_helper->time_total;
+		$this->size_total           =& $this->stats_helper->size_total;
+		$this->slow_op_microseconds =& $this->stats_helper->slow_op_microseconds;
+		$this->cache_hits           =& $this->stats['get'];
+		$this->cache_misses         =& $this->stats['add'];
 	}
 
 	/*
@@ -931,9 +935,9 @@ class WP_Object_Cache {
 	 * Get the memcached instance for the specified group.
 	 *
 	 * @param int|string $group
-	 * @return mixed
+	 * @return Memcache|Memcached
 	 */
-	public function &get_mc( $group ) {
+	public function get_mc( $group ) {
 		if ( isset( $this->mc[ $group ] ) ) {
 			return $this->mc[ $group ];
 		}
@@ -991,13 +995,44 @@ class WP_Object_Cache {
 		$this->key_salt = is_string( $key_salt ) && strlen( $key_salt ) ? $key_salt . ':' : '';
 	}
 
+	public function timer_start(): bool {
+		$this->time_start = microtime( true );
+		return true;
+	}
+
+	public function timer_stop(): float {
+		return microtime( true ) - $this->time_start;
+	}
+
+	/**
+	 * TODO: Deprecate.
+	 *
+	 * @param string $host
+	 * @param string $port
+	 */
+	public function failure_callback( $host, $port ): void {
+		$this->connection_errors[] = array(
+			'host' => $host,
+			'port' => $port,
+		);
+	}
 
 	/*
 	|--------------------------------------------------------------------------
 	| Stat-related tracking & output.
-	| Internal use only. A lot of the below may be deprecated/removed in the future.
+	| A lot of the below should be deprecated/removed in the future.
 	|--------------------------------------------------------------------------
 	*/
+
+	/**
+	 * Echoes the stats of the caching operations that have taken place.
+	 * Ideally this should be the only method left public in this section.
+	 *
+	 * @return void Outputs the info directly, nothing is returned.
+	 */
+	public function stats() {
+		$this->stats_helper->stats();
+	}
 
 	/**
 	 * Sets the key salt property.
@@ -1015,24 +1050,43 @@ class WP_Object_Cache {
 		$this->stats_helper->group_ops_stats( $op, $keys, $group, $size, $time, $comment );
 	}
 
-	public function timer_start(): bool {
-		$this->time_start = microtime( true );
-		return true;
-	}
-
-	public function timer_stop(): float {
-		return microtime( true ) - $this->time_start;
+	/**
+	 * @param string $field The stat field/group being incremented.
+	 * @param int $num Amount to increment by.
+	 */
+	public function increment_stat( $field, $num = 1 ): void {
+		$this->stats_helper->increment_stat( $field, $num );
 	}
 
 	/**
-	 * Echoes the stats of the caching.
-	 *
-	 * Gives the cache hits, and cache misses. Also prints every cached group,
-	 * key and the data.
-	 *
-	 * @return void Outputs the info directly, nothing is returned.
+	 * @param string|string[] $keys
+	 * @return string|string[]
 	 */
-	public function stats() {
-		$this->stats_helper->stats();
+	public function strip_memcached_keys( $keys ) {
+		return $this->stats_helper->strip_memcached_keys( $keys );
+	}
+
+	public function js_toggle(): void {
+		$this->stats_helper->js_toggle();
+	}
+
+	/**
+	 * @param string $line
+	 * @param string $trailing_html
+	 * @return string
+	 */
+	public function colorize_debug_line( $line, $trailing_html = '' ) {
+		return $this->stats_helper->colorize_debug_line( $line, $trailing_html );
+	}
+
+	/**
+	 * @param string|int $index
+	 * @param array $arr
+	 * @psalm-param array{0: string, 1: string|string[], 2: int|null, 3: float|null, 4: string, 5: string, 6: string|null } $arr
+	 *
+	 * @return string
+	 */
+	public function get_group_ops_line( $index, $arr ) {
+		return $this->stats_helper->get_group_ops_line( $index, $arr );
 	}
 }
