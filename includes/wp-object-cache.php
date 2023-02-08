@@ -227,7 +227,7 @@ class WP_Object_Cache {
 			$data = clone $data;
 		}
 
-		// TODO: Should handle non-persistant groups
+		// TODO: Should handle non-persistent groups
 
 		$expire = $this->get_expiration( $expire );
 		$size   = $this->get_data_size( $data );
@@ -557,7 +557,7 @@ class WP_Object_Cache {
 	public function incr( $key, $offset = 1, $group = 'default' ) {
 		$key = $this->key( $key, $group );
 
-		// TODO: Should handle non-persistant groups
+		// TODO: Should handle non-persistent groups
 
 		$this->timer_start();
 		$incremented = $this->adapter->increment( $key, $group, $offset );
@@ -585,7 +585,7 @@ class WP_Object_Cache {
 	public function decr( $key, $offset = 1, $group = 'default' ) {
 		$key = $this->key( $key, $group );
 
-		// TODO: Should handle non-persistant groups
+		// TODO: Should handle non-persistent groups
 
 		$this->timer_start();
 		$decremented = $this->adapter->decrement( $key, $group, $offset );

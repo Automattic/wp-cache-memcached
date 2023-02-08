@@ -28,27 +28,25 @@ class Memcached_Adapter implements Adapter_Interface {
 
 		/** @psalm-var array<string,array<string>> $memcached_servers */
 		foreach ( $memcached_servers as $bucket => $addresses ) {
-			$servers = [];
+			$bucket_servers = [];
 
-			foreach ( $addresses as $address ) {
+			foreach ( $addresses as $index => $address ) {
 				$parsed_address = $this->parse_address( $address );
-				$server_weight  = 1;
+				$server         = [
+					'host'   => $parsed_address['host'],
+					'port'   => $parsed_address['port'],
+					'weight' => 1,
+				];
 
-				$servers[] = [ $parsed_address['node'], $parsed_address['port'], $server_weight ];
+				$bucket_servers[] = $server;
 
 				// Prepare individual connections to servers in the default bucket for flush_number redundancy.
 				if ( 'default' === $bucket ) {
-					$memcached = new \Memcached();
-					$memcached->addServer( $parsed_address['node'], $parsed_address['port'], $server_weight );
-					$memcached->setOptions( $this->get_config_options() );
-
-					$this->default_connections[] = $memcached;
+					$this->default_connections[] = $this->create_connection_pool( 'redundancy-' . $index, [ $server ] );
 				}
 			}
 
-			$this->connections[ $bucket ] = new \Memcached();
-			$this->connections[ $bucket ]->addServers( $servers );
-			$this->connections[ $bucket ]->setOptions( $this->get_config_options() );
+			$this->connections[ $bucket ] = $this->create_connection_pool( 'bucket-' . $bucket, $bucket_servers );
 		}
 	}
 
@@ -300,24 +298,59 @@ class Memcached_Adapter implements Adapter_Interface {
 	}
 
 	/**
+	 * Servers and configurations are persisted between requests.
+	 * So we only want to add servers when the configuration has changed.
+	 *
+	 * @param string $name
+	 * @psalm-param array<int, array{host: string, port: int, weight: int}> $servers
+	 * @return \Memcached
+	 */
+	private function create_connection_pool( $name, $servers ) {
+		$mc = new \Memcached( $name );
+
+		// Servers and configurations are persisted between requests.
+		/** @psalm-var array<int,array{host: string, port: int, type: string}> $existing_servers */
+		$existing_servers = $mc->getServerList();
+
+		// Check if the servers have changed since they were registered.
+		$needs_refresh = count( $existing_servers ) !== count( $servers );
+		foreach ( $servers as $index => $server ) {
+			$existing_host = $existing_servers[ $index ]['host'] ?? null;
+			$existing_port = $existing_servers[ $index ]['port'] ?? null;
+
+			if ( $existing_host !== $server['host'] || $existing_port !== $server['port'] ) {
+				$needs_refresh = true;
+			}
+		}
+
+		if ( $needs_refresh ) {
+			$mc->resetServerList();
+			$mc->addServers( $servers );
+			$mc->setOptions( $this->get_config_options() );
+		}
+
+		return $mc;
+	}
+
+	/**
 	 * @param string $address
-	 * @psalm-return array{node: string, port: int}
+	 * @psalm-return array{host: string, port: int}
 	 */
 	private function parse_address( string $address ): array {
 		$default_port = 11211;
 
 		if ( 'unix://' == substr( $address, 0, 7 ) ) {
 			// Note: This slighly differs from the memcache adapater, as memcached wants unix:// stripped off.
-			$node = substr( $address, 7 );
+			$host = substr( $address, 7 );
 			$port = 0;
 		} else {
 			$items = explode( ':', $address, 2 );
-			$node  = $items[0];
+			$host  = $items[0];
 			$port  = isset( $items[1] ) ? intval( $items[1] ) : $default_port;
 		}
 
 		return [
-			'node' => $node,
+			'host' => $host,
 			'port' => $port,
 		];
 	}
@@ -334,7 +367,6 @@ class Memcached_Adapter implements Adapter_Interface {
 			\Memcached::OPT_CONNECT_TIMEOUT => 1000,
 			\Memcached::OPT_COMPRESSION     => true,
 			\Memcached::OPT_TCP_NODELAY     => true,
-			\Memcached::OPT_NO_BLOCK        => true,
 		];
 	}
 }

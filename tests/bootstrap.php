@@ -24,6 +24,11 @@ $fname   = dirname( __DIR__ ) . '/object-cache.php';
 $content = "<?php require_once '{$fname}';";
 file_put_contents( $_core_dir . '/wp-content/object-cache.php', $content ); // phpcs:ignore
 
+// TODO: Test both scenarios during CI stuffs.
+if ( ! defined( 'AUTOMATTIC_MEMCACHED_USE_MEMCACHED_EXTENSION' ) ) {
+	define( 'AUTOMATTIC_MEMCACHED_USE_MEMCACHED_EXTENSION', true );
+}
+
 // Start up the WP testing environment.
 /** @psalm-suppress UnresolvableInclude */
 require $_tests_dir . '/includes/bootstrap.php';

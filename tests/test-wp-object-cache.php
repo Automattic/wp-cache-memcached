@@ -60,7 +60,7 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 	/**
 	 * @dataProvider data_cache_inputs
 	 */
-	public function test_add_for_non_persistant_groups( $value ) {
+	public function test_add_for_non_persistent_groups( $value ) {
 		$group = 'do-not-persist-me';
 
 		$this->object_cache->add_non_persistent_groups( [ $group ] );
@@ -166,7 +166,7 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 	/**
 	 * @dataProvider data_cache_inputs
 	 */
-	public function test_set_for_non_persistant_groups( $value ) {
+	public function test_set_for_non_persistent_groups( $value ) {
 		$group = 'do-not-persist-me';
 
 		$this->object_cache->add_non_persistent_groups( [ $group ] );
@@ -258,7 +258,7 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 	/**
 	 * @dataProvider data_cache_inputs
 	 */
-	public function test_get_for_non_persistant_groups( $value ) {
+	public function test_get_for_non_persistent_groups( $value ) {
 		$group     = 'do-not-persist-me';
 		$cache_key = $this->object_cache->key( 'key', $group );
 
@@ -341,7 +341,7 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 		] );
 	}
 
-	public function test_get_multiple_for_non_persistant_groups() {
+	public function test_get_multiple_for_non_persistent_groups() {
 		$inputs = $this->data_cache_inputs();
 		$keys   = array_keys( $inputs );
 		$group  = 'do-not-persist-me';
@@ -415,11 +415,11 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 	/**
 	 * @dataProvider data_cache_inputs
 	 */
-	public function test_delete_for_non_persistant_groups( $value ) {
+	public function test_delete_for_non_persistent_groups( $value ) {
 		$group     = 'do-not-persist-me';
 		$cache_key = $this->object_cache->key( 'key', $group );
 
-		// Set in remote cache first, then add to non-persistant groups.
+		// Set in remote cache first, then add to non-persistent groups.
 		self::assertTrue( $this->object_cache->set( 'key', $value, $group ) );
 		$this->object_cache->flush_runtime();
 		$this->object_cache->add_non_persistent_groups( [ $group ] );
@@ -466,7 +466,7 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 		}
 	}
 
-	public function test_delete_multiple_for_non_persistant_groups() {
+	public function test_delete_multiple_for_non_persistent_groups() {
 		$inputs = $this->data_cache_inputs();
 		$keys   = array_keys( $inputs );
 		$group  = 'do-not-persist-me';
@@ -482,7 +482,7 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 			$expected_third[ $key ]  = $input_array[0];
 		}
 
-		// Set in remote cache first, then add to non-persistant groups.
+		// Set in remote cache first, then add to non-persistent groups.
 		$this->object_cache->set_multiple( $values, $group );
 		$this->object_cache->flush_runtime();
 		$this->object_cache->add_non_persistent_groups( [ $group ] );
