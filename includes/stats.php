@@ -154,14 +154,14 @@ class Stats {
 	 */
 	public function get_stats(): array {
 		$stats = [
-			'stats'           => $this->stats,
-			'operations'      => [],
-			'groups'          => [],
-			'slow-ops'        => [],
-			'slow-ops-groups' => [],
-			'totals'          => [
-				'query_time' => $this->time_total,
-				'size'       => $this->size_total,
+			'operation_counts' => $this->stats,
+			'operations'       => [],
+			'groups'           => [],
+			'slow-ops'         => [],
+			'slow-ops-groups'  => [],
+			'totals'           => [
+				'query_time'   => $this->time_total,
+				'size'         => $this->size_total,
 			],
 		];
 
