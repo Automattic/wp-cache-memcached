@@ -160,8 +160,8 @@ class Stats {
 			'slow-ops'         => [],
 			'slow-ops-groups'  => [],
 			'totals'           => [
-				'query_time'   => $this->time_total,
-				'size'         => $this->size_total,
+				'query_time' => $this->time_total,
+				'size'       => $this->size_total,
 			],
 		];
 
