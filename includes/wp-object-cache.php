@@ -1059,6 +1059,13 @@ class WP_Object_Cache {
 	}
 
 	/**
+	 * Returns the collected raw stats.
+	 */
+	public function get_stats(): array {
+		return $this->stats_helper->get_stats();
+	}
+
+	/**
 	 * @param string $field The stat field/group being incremented.
 	 * @param int $num Amount to increment by.
 	 */
