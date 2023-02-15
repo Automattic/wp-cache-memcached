@@ -13,6 +13,9 @@ class Memcached_Adapter implements Adapter_Interface {
 	/** @psalm-var array<int, \Memcached> */
 	private array $default_connections = [];
 
+	/** @psalm-var array<string, string> */
+	private array $redundancy_server_keys = [];
+
 	/** @psalm-var array<array{host: string, port: string}> */
 	private array $connection_errors = [];
 
@@ -42,12 +45,15 @@ class Memcached_Adapter implements Adapter_Interface {
 
 				// Prepare individual connections to servers in the default bucket for flush_number redundancy.
 				if ( 'default' === $bucket ) {
+					// Deprecated in this adapter. As long as no requests are made from these pools, the connections should never be established.
 					$this->default_connections[] = $this->create_connection_pool( 'redundancy-' . $index, [ $server ] );
 				}
 			}
 
 			$this->connections[ $bucket ] = $this->create_connection_pool( 'bucket-' . $bucket, $bucket_servers );
 		}
+
+		$this->redundancy_server_keys = $this->get_server_keys_for_redundancy();
 	}
 
 	/*
@@ -248,17 +254,19 @@ class Memcached_Adapter implements Adapter_Interface {
 	/**
 	 * Set a key across all default memcached servers.
 	 *
-	 * @param string $key               The full key, including group & flush prefixes.
-	 * @param mixed  $data              The contents to store in the cache.
-	 * @param int    $expiration        When to expire the cache contents, in seconds.
-	 * @param ?int[]  $servers_to_update Specific default servers to update.
+	 * @param string    $key               The full key, including group & flush prefixes.
+	 * @param mixed     $data              The contents to store in the cache.
+	 * @param int       $expiration        When to expire the cache contents, in seconds.
+	 * @param ?string[] $servers_to_update Specific default servers to update, in string format of "host:port".
 	 *
 	 * @return void
 	 */
 	public function set_with_redundancy( $key, $data, $expiration, $servers_to_update = null ) {
-		foreach ( $this->default_connections as $index => $mc ) {
-			if ( is_null( $servers_to_update ) || in_array( $index, $servers_to_update, true ) ) {
-				$mc->set( $key, $data, $expiration );
+		$mc = $this->connections['default'];
+
+		foreach ( $this->redundancy_server_keys as $server_string => $server_key ) {
+			if ( is_null( $servers_to_update ) || in_array( $server_string, $servers_to_update, true ) ) {
+				$mc->setByKey( $server_key, $key, $data, $expiration );
 			}
 		}
 	}
@@ -266,16 +274,17 @@ class Memcached_Adapter implements Adapter_Interface {
 	/**
 	 * Get a key across all default memcached servers.
 	 *
-	 * @param string $key   The full key, including group & flush prefixes.
+	 * @param string $key The full key, including group & flush prefixes.
 	 *
-	 * @return array<mixed> The array index refers to the same index of the memcached server in the default array.
+	 * @psalm-return array<string, mixed> Key is the server's "host:port", value is returned from Memcached.
 	 */
 	public function get_with_redundancy( $key ) {
-		$values = [];
+		$mc = $this->connections['default'];
 
-		foreach ( $this->default_connections as $index => $mc ) {
+		$values = [];
+		foreach ( $this->redundancy_server_keys as $server_string => $server_key ) {
 			/** @psalm-suppress MixedAssignment */
-			$values[ $index ] = $mc->get( $key );
+			$values[ $server_string ] = $mc->getByKey( $server_key, $key );
 		}
 
 		return $values;
@@ -372,5 +381,41 @@ class Memcached_Adapter implements Adapter_Interface {
 			\Memcached::OPT_COMPRESSION     => true,
 			\Memcached::OPT_TCP_NODELAY     => true,
 		];
+	}
+
+	/**
+	 * We want to find a unique string that, when hashed, will map to each
+	 * of the default servers in our pool. This will allow us to
+	 * talk with each server individually and set a key with redundancy.
+	 *
+	 * @psalm-return array<string, string> Key is the server's "host:port", value is the server_key that accesses it.
+	 */
+	private function get_server_keys_for_redundancy(): array {
+		$default_pool = $this->connections['default'];
+		$servers      = $default_pool->getServerList();
+
+		$server_keys = [];
+		for ( $i = 0; $i < 1000; $i++ ) {
+			$test_key = 'redundancy_key_' . $i;
+
+			/** @psalm-var array{host: string, port: int, weight: int}|false $result */
+			$result = $default_pool->getServerByKey( $test_key );
+
+			if ( ! $result ) {
+				continue;
+			}
+
+			$server_string = $result['host'] . ':' . $result['port'];
+			if ( ! isset( $server_keys[ $server_string ] ) ) {
+				$server_keys[ $server_string ] = $test_key;
+			}
+
+			// Keep going until every server is accounted for (capped at 1000 attempts - which is incredibly unlikely unless there are tons of servers).
+			if ( count( $server_keys ) === count( $servers ) ) {
+				break;
+			}
+		}
+
+		return $server_keys;
 	}
 }

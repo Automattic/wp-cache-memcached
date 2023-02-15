@@ -784,8 +784,10 @@ class WP_Object_Cache {
 		$this->adapter->set_with_redundancy( $key, $value, $expire );
 		$elapsed = $this->timer_stop();
 
-		// TODO: Split up or something because multiple calls took place?
-		$this->group_ops_stats( 'set_flush_number', $key, $group, $size, $elapsed, 'replication' );
+		$average_time_elapsed = $elapsed / count( $this->default_mcs );
+		foreach ( $this->default_mcs as $_default_mc ) {
+			$this->group_ops_stats( 'set_flush_number', $key, $group, $size, $average_time_elapsed, 'replication' );
+		}
 	}
 
 	/**
@@ -822,11 +824,10 @@ class WP_Object_Cache {
 			return false;
 		}
 
-		/** @psalm-var int[] $servers_to_update */
 		$servers_to_update = [];
-		foreach ( $values as $index => $value ) {
+		foreach ( $values as $server_string => $value ) {
 			if ( $value < $max ) {
-				$servers_to_update[] = (int) $index;
+				$servers_to_update[] = $server_string;
 			}
 		}
 
