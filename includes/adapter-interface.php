@@ -35,7 +35,7 @@ interface Adapter_Interface {
 	/**
 	 * Close the memcached connections.
 	 *
-	 * @return void
+	 * @return bool
 	 */
 	public function close_connections();
 

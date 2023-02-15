@@ -103,13 +103,17 @@ class Memcache_Adapter implements Adapter_Interface {
 
 	/**
 	 * Close the memcached connections.
+	 * Note that Memcache::close() doesn't close persistent connections, but does free up some memory.
 	 *
-	 * @return void
+	 * @return bool
 	 */
 	public function close_connections() {
+		// TODO: Should probably "close" $default_connections too?
 		foreach ( $this->connections as $connection ) {
 			$connection->close();
 		}
+
+		return true;
 	}
 
 	/*

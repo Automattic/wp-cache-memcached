@@ -89,13 +89,11 @@ class Memcached_Adapter implements Adapter_Interface {
 
 	/**
 	 * Close the memcached connections.
-	 *
-	 * @return void
+	 * @return bool
 	 */
 	public function close_connections() {
-		foreach ( $this->connections as $connection ) {
-			$connection->quit();
-		}
+		// Memcached::quit() closes persistent connections, which we don't want to do.
+		return true;
 	}
 
 	/*
@@ -325,7 +323,13 @@ class Memcached_Adapter implements Adapter_Interface {
 
 		if ( $needs_refresh ) {
 			$mc->resetServerList();
-			$mc->addServers( $servers );
+
+			$servers_to_add = [];
+			foreach ( $servers as $server ) {
+				$servers_to_add[] = [ $server['host'], $server['port'], $server['weight'] ];
+			}
+
+			$mc->addServers( $servers_to_add );
 			$mc->setOptions( $this->get_config_options() );
 		}
 

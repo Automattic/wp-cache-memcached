@@ -691,10 +691,10 @@ class WP_Object_Cache {
 	/**
 	 * Close the connections.
 	 *
-	 * @return void
+	 * @return bool
 	 */
 	public function close() {
-		$this->adapter->close_connections();
+		return $this->adapter->close_connections();
 	}
 
 
