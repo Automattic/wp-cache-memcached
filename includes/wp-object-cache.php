@@ -636,10 +636,14 @@ class WP_Object_Cache {
 
 	/**
 	 * Removes all cache items from the in-memory runtime cache.
+	 * Also reset the local stat-related tracking for individual operations.
+	 *
 	 * @return true Always returns true.
 	 */
 	public function flush_runtime() {
-		$this->cache = [];
+		$this->cache     = [];
+		$this->group_ops = [];
+
 		return true;
 	}
 

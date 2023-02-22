@@ -590,11 +590,13 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 		self::assertTrue( $this->object_cache->add( 'key', 'data' ) );
 		$cache_key = $this->object_cache->key( 'key', 'default' );
 		self::assertNotEmpty( $this->object_cache->cache[ $cache_key ] );
+		self::assertNotEmpty( $this->object_cache->group_ops );
 
 		self::assertTrue( $this->object_cache->flush_runtime() );
 
 		// Gone from local cache.
 		self::assertArrayNotHasKey( $cache_key, $this->object_cache->cache );
+		self::assertEquals( $this->object_cache->group_ops, [] );
 
 		// But exists remotely still
 		self::assertEquals( $this->object_cache->get( 'key' ), 'data' );
@@ -648,8 +650,7 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 	}
 
 	public function test_close() {
-		// Void return.
-		self::assertNull( $this->object_cache->close() );
+		self::assertTrue( $this->object_cache->close() );
 
 		// TODO: Further testing requires being able to be able to inject/mock the adapters.
 	}
