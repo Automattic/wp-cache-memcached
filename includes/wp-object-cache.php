@@ -227,7 +227,14 @@ class WP_Object_Cache {
 			$data = clone $data;
 		}
 
-		// TODO: Should handle non-persistent groups
+		if ( $this->is_non_persistent_group( $group ) ) {
+			if ( ! isset( $this->cache[ $key ] ) ) {
+				return false;
+			}
+
+			$this->cache[ $key ]['value'] = $data;
+			return true;
+		}
 
 		$expire = $this->get_expiration( $expire );
 		$size   = $this->get_data_size( $data );
@@ -269,7 +276,7 @@ class WP_Object_Cache {
 		}
 
 		if ( $this->is_non_persistent_group( $group ) ) {
-			$this->group_ops_stats( 'set_local', $key, $group, null, null );
+			$this->group_ops_stats( 'set_local', $key, $group );
 
 			$this->cache[ $key ] = [
 				'value' => $data,
@@ -347,7 +354,7 @@ class WP_Object_Cache {
 		}
 
 		if ( $this->is_non_persistent_group( $group ) ) {
-			// This is a bit suboptimal, but hard to change since the non-persistent group could later be removed.
+			// This is a bit suboptimal, but keeping for back-compat for now.
 			$found = false;
 
 			$this->cache[ $key ] = [
@@ -557,7 +564,14 @@ class WP_Object_Cache {
 	public function incr( $key, $offset = 1, $group = 'default' ) {
 		$key = $this->key( $key, $group );
 
-		// TODO: Should handle non-persistent groups
+		if ( $this->is_non_persistent_group( $group ) ) {
+			if ( ! isset( $this->cache[ $key ] ) || ! is_int( $this->cache[ $key ]['value'] ) ) {
+				return false;
+			}
+
+			$this->cache[ $key ]['value'] += $offset;
+			return $this->cache[ $key ]['value'];
+		}
 
 		$this->timer_start();
 		$incremented = $this->adapter->increment( $key, $group, $offset );
@@ -585,7 +599,19 @@ class WP_Object_Cache {
 	public function decr( $key, $offset = 1, $group = 'default' ) {
 		$key = $this->key( $key, $group );
 
-		// TODO: Should handle non-persistent groups
+		if ( $this->is_non_persistent_group( $group ) ) {
+			if ( ! isset( $this->cache[ $key ] ) || ! is_int( $this->cache[ $key ]['value'] ) ) {
+				return false;
+			}
+
+			$new_value = $this->cache[ $key ]['value'] - $offset;
+			if ( $new_value < 0 ) {
+				$new_value = 0;
+			}
+
+			$this->cache[ $key ]['value'] = $new_value;
+			return $this->cache[ $key ]['value'];
+		}
 
 		$this->timer_start();
 		$decremented = $this->adapter->decrement( $key, $group, $offset );

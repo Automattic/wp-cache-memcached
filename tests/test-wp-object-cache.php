@@ -23,6 +23,7 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 	}
 
 	public function tearDown(): void {
+		$this->object_cache->flush();
 		$this->object_cache->close();
 		parent::tearDown();
 	}
@@ -134,6 +135,36 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 		self::assertFalse( $this->object_cache->replace( 'new_key', $replace_value ) );
 
 		// TODO: Test unsetting from local cache after memcached failure.
+	}
+
+	/**
+	 * @dataProvider data_cache_inputs
+	 */
+	public function test_replace_for_non_persistent_groups( $value, $replace_value ) {
+		$group = 'do-not-persist-me';
+
+		$this->object_cache->add_non_persistent_groups( [ $group ] );
+
+		// Add to memcached first.
+		self::assertTrue( $this->object_cache->add( 'key', $value, $group ) );
+
+		// Replace with new value.
+		self::assertTrue( $this->object_cache->replace( 'key', $replace_value, $group ) );
+
+		// Check local cache.
+		$cache_key = $this->object_cache->key( 'key', $group );
+		self::assertEquals( $this->object_cache->cache[ $cache_key ], [
+			'value' => $replace_value,
+			'found' => false,
+		] );
+
+		// Can't replace a value that isn't set yet.
+		self::assertFalse( $this->object_cache->replace( 'new_key', $replace_value, $group ) );
+
+		// Never made it's way to the remote cache.
+		unset( $this->object_cache->cache[ $cache_key ] );
+		$this->object_cache->no_mc_groups = [];
+		self::assertFalse( $this->object_cache->get( 'key', $group ) );
 	}
 
 	/**
@@ -512,7 +543,7 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 		$this->object_cache->add( 'key', 1 );
 		self::assertEquals( $this->object_cache->incr( 'key' ), 2 );
 
-		// Can increment by a specified ammount
+		// Can increment by a specified amount
 		$this->object_cache->add( 'key2', 1 );
 		self::assertEquals( $this->object_cache->incr( 'key2', 5 ), 6 );
 
@@ -532,12 +563,44 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 		// TODO: Check if type errors are thrown.
 	}
 
+	public function test_incr_for_non_persistent_groups() {
+		$group     = 'do-not-persist-me';
+		$cache_key = $this->object_cache->key( 'key', $group );
+
+		// Set in remote cache first, then add to non-persistent groups.
+		self::assertTrue( $this->object_cache->set( 'key', 100, $group ) );
+		$this->object_cache->flush_runtime();
+		$this->object_cache->add_non_persistent_groups( [ $group ] );
+
+		// Nothing to increment yet.
+		self::assertFalse( $this->object_cache->incr( 'key', 1, $group ) );
+
+		// Now it can locally increment.
+		self::assertTrue( $this->object_cache->add( 'key', 0, $group ) );
+		self::assertEquals( $this->object_cache->incr( 'key', 2, $group ), 2 );
+
+		// Fails if value is non-int.
+		$this->object_cache->add( 'key2', 'non-numeric', $group );
+		self::assertFalse( $this->object_cache->incr( 'key2', 1, $group ) );
+
+		$this->object_cache->add( 'key3', [ 'non-numeric' ], $group );
+		self::assertFalse( $this->object_cache->incr( 'key3', 1, $group ) );
+
+		$this->object_cache->add( 'key4', 1.234, $group );
+		self::assertFalse( $this->object_cache->incr( 'key4', 1, $group ) );
+
+		// But the changes never made their way to the remote cache.
+		$this->object_cache->flush_runtime();
+		$this->object_cache->no_mc_groups = [];
+		self::assertEquals( $this->object_cache->get( 'key', $group ), 100 );
+	}
+
 	public function test_decr() {
 		// Decrement by 1 by default.
 		$this->object_cache->add( 'key', 1 );
 		self::assertEquals( $this->object_cache->decr( 'key' ), 0 );
 
-		// Can decrement by a specified ammount
+		// Can decrement by a specified amount
 		$this->object_cache->add( 'key2', 5 );
 		self::assertEquals( $this->object_cache->decr( 'key2', 2 ), 3 );
 
@@ -557,6 +620,42 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 
 		$this->object_cache->add( 'key7', 1.234 );
 		self::assertFalse( $this->object_cache->decr( 'key7' ) );
+	}
+
+	public function test_decr_for_non_persistent_groups() {
+		$group     = 'do-not-persist-me';
+		$cache_key = $this->object_cache->key( 'key', $group );
+
+		// Set in remote cache first, then add to non-persistent groups.
+		self::assertTrue( $this->object_cache->set( 'key', 100, $group ) );
+		$this->object_cache->flush_runtime();
+		$this->object_cache->add_non_persistent_groups( [ $group ] );
+
+		// Nothing to decrement yet.
+		self::assertFalse( $this->object_cache->decr( 'key', 1, $group ) );
+
+		// Now it can locally decrement.
+		self::assertTrue( $this->object_cache->add( 'key', 4, $group ) );
+		self::assertEquals( $this->object_cache->decr( 'key', 2, $group ), 2 );
+
+		// Returns zero if decremented value would have been less than 0.
+		$this->object_cache->add( 'key2', 2 );
+		self::assertEquals( $this->object_cache->decr( 'key2', 3 ), 0 );
+
+		// Fails if value is non-int.
+		$this->object_cache->add( 'key3', 'non-numeric', $group );
+		self::assertFalse( $this->object_cache->decr( 'key3', 1, $group ) );
+
+		$this->object_cache->add( 'key4', [ 'non-numeric' ], $group );
+		self::assertFalse( $this->object_cache->decr( 'key4', 1, $group ) );
+
+		$this->object_cache->add( 'key5', 1.234, $group );
+		self::assertFalse( $this->object_cache->decr( 'key5', 1, $group ) );
+
+		// But the changes never made their way to the remote cache.
+		$this->object_cache->flush_runtime();
+		$this->object_cache->no_mc_groups = [];
+		self::assertEquals( $this->object_cache->get( 'key', $group ), 100 );
 	}
 
 	public function test_flush() {
