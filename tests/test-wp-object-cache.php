@@ -10,6 +10,8 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 	 */
 	private $object_cache;
 
+	private $is_using_memcached_ext = false;
+
 	public function setUp(): void {
 		parent::setUp();
 		$host1 = getenv( 'MEMCACHED_HOST_1' );
@@ -20,6 +22,10 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 
 		$GLOBALS['memcached_servers'] = [ $host1, $host2 ];
 		$GLOBALS['wp_object_cache']   = $this->object_cache = new WP_Object_Cache(); // phpcs:ignore
+
+		if ( defined( 'AUTOMATTIC_MEMCACHED_USE_MEMCACHED_EXTENSION' ) && AUTOMATTIC_MEMCACHED_USE_MEMCACHED_EXTENSION ) {
+			$this->is_using_memcached_ext = true;
+		}
 	}
 
 	public function tearDown(): void {
@@ -550,6 +556,11 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 		// Returns false if key doesn't exist yet.
 		self::assertFalse( $this->object_cache->incr( 'key3' ) );
 
+		// Memcache extension throws notices for the following tests, memcached does not (despite what the docs say).
+		if ( ! $this->is_using_memcached_ext ) {
+			self::expectNotice();
+		}
+
 		// Fails if value is non-int.
 		$this->object_cache->add( 'key4', 'non-numeric' );
 		self::assertFalse( $this->object_cache->incr( 'key4' ) );
@@ -559,8 +570,6 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 
 		$this->object_cache->add( 'key6', 1.234 );
 		self::assertFalse( $this->object_cache->incr( 'key6' ) );
-
-		// TODO: Check if type errors are thrown.
 	}
 
 	public function test_incr_for_non_persistent_groups() {
@@ -610,6 +619,11 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 		// Returns zero if decremented value would have been less than 0.
 		$this->object_cache->add( 'key4', 2 );
 		self::assertEquals( $this->object_cache->decr( 'key4', 3 ), 0 );
+
+		// Memcache extension throws notices for the following tests, memcached does not (despite what the docs say).
+		if ( ! $this->is_using_memcached_ext ) {
+			self::expectNotice();
+		}
 
 		// Fails if value is non-int.
 		$this->object_cache->add( 'key5', 'non-numeric' );
