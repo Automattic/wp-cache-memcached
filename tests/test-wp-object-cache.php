@@ -791,10 +791,10 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 			self::assertTrue( $this->object_cache->delete( $key ) );
 		}
 
-		self::assertEquals( $this->object_cache->add_multiple( $large_keys ), array_map( fn() => true, $large_keys ) );
-		self::assertEquals( $this->object_cache->delete_multiple( array_keys( $large_keys ) ), array_map( fn() => true, $large_keys ) );
-		self::assertEquals( $this->object_cache->set_multiple( $large_keys ), $large_keys );
-		self::assertEquals( $this->object_cache->get_multiple( array_keys( $large_keys ) ), $large_keys );
+		self::assertSame( $this->object_cache->add_multiple( $large_keys ), array_map( fn() => true, $large_keys ) );
+		self::assertSame( $this->object_cache->delete_multiple( array_keys( $large_keys ) ), array_map( fn() => true, $large_keys ) );
+		self::assertSame( $this->object_cache->set_multiple( $large_keys ), array_map( fn() => true, $large_keys ) );
+		self::assertSame( $this->object_cache->get_multiple( array_keys( $large_keys ) ), $large_keys );
 	}
 
 	/*
