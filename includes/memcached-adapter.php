@@ -120,7 +120,7 @@ class Memcached_Adapter implements Adapter_Interface {
 	 */
 	public function add( $key, $connection_group, $data, $expiration ) {
 		$mc = $this->get_connection( $connection_group );
-		return $mc->add( $this->maybe_reduce_key_length( $key ), $data, $expiration );
+		return $mc->add( $this->normalize_key( $key ), $data, $expiration );
 	}
 
 	/**
@@ -135,7 +135,7 @@ class Memcached_Adapter implements Adapter_Interface {
 	 */
 	public function replace( $key, $connection_group, $data, $expiration ) {
 		$mc = $this->get_connection( $connection_group );
-		return $mc->replace( $this->maybe_reduce_key_length( $key ), $data, $expiration );
+		return $mc->replace( $this->normalize_key( $key ), $data, $expiration );
 	}
 
 	/**
@@ -150,7 +150,7 @@ class Memcached_Adapter implements Adapter_Interface {
 	 */
 	public function set( $key, $connection_group, $data, $expiration ) {
 		$mc = $this->get_connection( $connection_group );
-		return $mc->set( $this->maybe_reduce_key_length( $key ), $data, $expiration );
+		return $mc->set( $this->normalize_key( $key ), $data, $expiration );
 	}
 
 	/**
@@ -164,7 +164,7 @@ class Memcached_Adapter implements Adapter_Interface {
 	public function get( $key, $connection_group ) {
 		$mc = $this->get_connection( $connection_group );
 		/** @psalm-suppress MixedAssignment */
-		$value = $mc->get( $this->maybe_reduce_key_length( $key ) );
+		$value = $mc->get( $this->normalize_key( $key ) );
 
 		return [
 			'value' => $value,
@@ -183,7 +183,7 @@ class Memcached_Adapter implements Adapter_Interface {
 	 */
 	public function get_multiple( $keys, $connection_group ) {
 		$mc          = $this->get_connection( $connection_group );
-		$mapped_keys = $this->maybe_reduce_key_lengths_with_mapping( $keys );
+		$mapped_keys = $this->normalize_keys_with_mapping( $keys );
 
 		/** @psalm-var array<string, mixed>|false $results */
 		$results = $mc->getMulti( array_keys( $mapped_keys ) );
@@ -211,7 +211,7 @@ class Memcached_Adapter implements Adapter_Interface {
 	 */
 	public function delete( $key, $connection_group ) {
 		$mc = $this->get_connection( $connection_group );
-		return $mc->delete( $this->maybe_reduce_key_length( $key ) );
+		return $mc->delete( $this->normalize_key( $key ) );
 	}
 
 	/**
@@ -224,7 +224,7 @@ class Memcached_Adapter implements Adapter_Interface {
 	 */
 	public function delete_multiple( $keys, $connection_group ) {
 		$mc          = $this->get_connection( $connection_group );
-		$mapped_keys = $this->maybe_reduce_key_lengths_with_mapping( $keys );
+		$mapped_keys = $this->normalize_keys_with_mapping( $keys );
 
 		/** @psalm-var array<string, true|int> $results */
 		$results = $mc->deleteMulti( array_keys( $mapped_keys ) );
@@ -251,7 +251,7 @@ class Memcached_Adapter implements Adapter_Interface {
 	 */
 	public function increment( $key, $connection_group, $offset ) {
 		$mc = $this->get_connection( $connection_group );
-		return $mc->increment( $this->maybe_reduce_key_length( $key ), $offset );
+		return $mc->increment( $this->normalize_key( $key ), $offset );
 	}
 
 	/**
@@ -265,7 +265,7 @@ class Memcached_Adapter implements Adapter_Interface {
 	 */
 	public function decrement( $key, $connection_group, $offset ) {
 		$mc = $this->get_connection( $connection_group );
-		return $mc->decrement( $this->maybe_reduce_key_length( $key ), $offset );
+		return $mc->decrement( $this->normalize_key( $key ), $offset );
 	}
 
 	/**
@@ -446,7 +446,7 @@ class Memcached_Adapter implements Adapter_Interface {
 	 * @param string $key
 	 * @psalm-return string
 	 */
-	private function maybe_reduce_key_length( $key ) {
+	private function normalize_key( $key ) {
 		if ( strlen( $key ) <= 250 ) {
 			return $key;
 		} else {
@@ -460,11 +460,11 @@ class Memcached_Adapter implements Adapter_Interface {
 	 * @param string[] $keys
 	 * @psalm-return array<string, string>
 	 */
-	private function maybe_reduce_key_lengths_with_mapping( $keys ) {
+	private function normalize_keys_with_mapping( $keys ) {
 		$mapped_keys = [];
 
 		foreach ( $keys as $key ) {
-			$mapped_keys[ $this->maybe_reduce_key_length( $key ) ] = $key;
+			$mapped_keys[ $this->normalize_key( $key ) ] = $key;
 		}
 
 		return $mapped_keys;
