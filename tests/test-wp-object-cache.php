@@ -393,6 +393,7 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 			'mget_3999' => '3999',
 		];
 		$this->object_cache->set_multiple( $large_mget_values );
+		$this->object_cache->flush_runtime();
 
 		$expected_large_mget_values = [];
 		for ( $i = 0; $i < 4000; $i++ ) {
