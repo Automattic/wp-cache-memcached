@@ -120,6 +120,11 @@ class Memcached_Adapter implements Adapter_Interface {
 	 */
 	public function add( $key, $connection_group, $data, $expiration ) {
 		$mc = $this->get_connection( $connection_group );
+
+		if ( 'options' === $connection_group ) {
+			return $mc->addByKey( $connection_group, $this->normalize_key( $key ), $data, $expiration );
+		}
+
 		return $mc->add( $this->normalize_key( $key ), $data, $expiration );
 	}
 
@@ -150,6 +155,11 @@ class Memcached_Adapter implements Adapter_Interface {
 	 */
 	public function set( $key, $connection_group, $data, $expiration ) {
 		$mc = $this->get_connection( $connection_group );
+
+		if ( 'options' === $connection_group ) {
+			return $mc->setByKey( $connection_group, $this->normalize_key( $key ), $data, $expiration );
+		}
+
 		return $mc->set( $this->normalize_key( $key ), $data, $expiration );
 	}
 
@@ -163,8 +173,9 @@ class Memcached_Adapter implements Adapter_Interface {
 	 */
 	public function get( $key, $connection_group ) {
 		$mc = $this->get_connection( $connection_group );
+
 		/** @psalm-suppress MixedAssignment */
-		$value = $mc->get( $this->normalize_key( $key ) );
+		$value = 'options' === $connection_group ? $mc->getByKey( $connection_group, $this->normalize_key( $key ) ) : $mc->get( $this->normalize_key( $key ) );
 
 		return [
 			'value' => $value,
@@ -194,7 +205,7 @@ class Memcached_Adapter implements Adapter_Interface {
 
 			foreach( $chunked_keys as $chunk_of_keys ) {
 				/** @psalm-var array<string, mixed>|false $partial_results */
-				$partial_results = $mc->getMulti( array_keys( $chunk_of_keys ) );
+				$partial_results = 'options' === $connection_group ? $mc->getMultiByKey( $connection_group, array_keys( $chunk_of_keys ) ) : $mc->getMulti( array_keys( $chunk_of_keys ) );
 
 				if ( ! is_array( $partial_results ) ) {
 					// If any of the lookups fail, we'll bail on the whole thing to be consistent.
@@ -205,7 +216,7 @@ class Memcached_Adapter implements Adapter_Interface {
 			}
 		} else {
 			/** @psalm-var array<string, mixed>|false $results */
-			$results = $mc->getMulti( array_keys( $mapped_keys ) );
+			$results = 'options' === $connection_group ? $mc->getMultiByKey( $connection_group, array_keys( $mapped_keys ) ) : $mc->getMulti( array_keys( $mapped_keys ) );
 
 			if ( ! is_array( $results ) ) {
 				return false;

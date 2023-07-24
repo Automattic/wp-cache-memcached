@@ -48,11 +48,6 @@ function wp_cache_init() {
 function wp_cache_add( $key, $data, $group = '', $expire = 0 ) {
 	global $wp_object_cache;
 
-	// Falsey values for alloptions should never be cached.
-	if ( 'alloptions' === $key && 'options' === $group && ! $data ) {
-		return false;
-	}
-
 	/** @psalm-suppress RedundantCastGivenDocblockType */
 	return $wp_object_cache->add( $key, $data, $group, (int) $expire );
 }

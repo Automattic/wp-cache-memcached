@@ -131,7 +131,8 @@ class WP_Object_Cache {
 	 * @return bool True on success, false on failure or if cache key and group already exist.
 	 */
 	public function add( $key, $data, $group = 'default', $expire = 0 ) {
-		$key = $this->key( $key, $group );
+		$is_alloptions = 'alloptions' === $key && 'options' === $group;
+		$key           = $this->key( $key, $group );
 
 		if ( is_object( $data ) ) {
 			$data = clone $data;
@@ -158,7 +159,7 @@ class WP_Object_Cache {
 		$size   = $this->get_data_size( $data );
 
 		$this->timer_start();
-		$result  = $this->adapter->add( $key, $group, $data, $expire );
+		$result  = $is_alloptions ? $this->set_alloptions( $data ) : $this->adapter->add( $key, $group, $data, $expire );
 		$elapsed = $this->timer_stop();
 
 		$comment = '';
@@ -269,7 +270,8 @@ class WP_Object_Cache {
 	 * @return bool True if contents were set, false if failed.
 	 */
 	public function set( $key, $data, $group = 'default', $expire = 0 ) {
-		$key = $this->key( $key, $group );
+		$is_alloptions = 'alloptions' === $key && 'options' === $group;
+		$key           = $this->key( $key, $group );
 
 		if ( is_object( $data ) ) {
 			$data = clone $data;
@@ -290,7 +292,7 @@ class WP_Object_Cache {
 		$size   = $this->get_data_size( $data );
 
 		$this->timer_start();
-		$result  = $this->adapter->set( $key, $group, $data, $expire );
+		$result  = $is_alloptions ? $this->set_alloptions( $data ) : $this->adapter->set( $key, $group, $data, $expire );
 		$elapsed = $this->timer_stop();
 
 		$this->group_ops_stats( 'set', $key, $group, $size, $elapsed );
@@ -336,7 +338,8 @@ class WP_Object_Cache {
 	 * @return mixed|false The cache contents on success, false on failure to retrieve contents.
 	 */
 	public function get( $key, $group = 'default', $force = false, &$found = null ) {
-		$key = $this->key( $key, $group );
+		$is_alloptions = 'alloptions' === $key && 'options' === $group;
+		$key           = $this->key( $key, $group );
 
 		if ( $force && $this->is_non_persistent_group( $group ) ) {
 			// There's nothing to "force" retrieve.
@@ -369,7 +372,7 @@ class WP_Object_Cache {
 
 		$this->timer_start();
 		/** @psalm-suppress MixedAssignment */
-		$result  = $this->adapter->get( $key, $group );
+		$result  = $is_alloptions ? $this->get_alloptions() : $this->adapter->get( $key, $group );
 		$elapsed = $this->timer_stop();
 
 		$this->cache[ $key ] = $result;
@@ -488,7 +491,8 @@ class WP_Object_Cache {
 	 * @return bool True on success, false on failure or if the contents were not deleted.
 	 */
 	public function delete( $key, $group = 'default' ) {
-		$key = $this->key( $key, $group );
+		$is_alloptions = 'alloptions' === $key && 'options' === $group;
+		$key           = $this->key( $key, $group );
 
 		if ( $this->is_non_persistent_group( $group ) ) {
 			$result = isset( $this->cache[ $key ] );
@@ -498,7 +502,7 @@ class WP_Object_Cache {
 		}
 
 		$this->timer_start();
-		$deleted = $this->adapter->delete( $key, $group );
+		$deleted = $is_alloptions ? $this->delete_alloptions() : $this->adapter->delete( $key, $group );
 		$elapsed = $this->timer_stop();
 
 		$this->group_ops_stats( 'delete', $key, $group, null, $elapsed );
@@ -727,6 +731,145 @@ class WP_Object_Cache {
 		return $this->adapter->close_connections();
 	}
 
+	/*
+	|--------------------------------------------------------------------------
+	| Special alloptions handling to split up into individual cache entries
+	| for each option, helping prevent race condtions.
+	|--------------------------------------------------------------------------
+	*/
+
+	/**
+	 * Retrieve alloptions.
+	 *
+	 * Since we've split up each option into it's own cache entry,
+	 * we instead cache the key list so we can getMulti().
+	 *
+	 * @param string[] $alloptions_keys Optional set of option keys to lookup, bypassing the cached key list.
+	 * @return array{value: array<mixed>|false, found: bool}
+	 */
+	private function get_alloptions( $alloptions_keys = [] ) {
+		$options_group = 'options';
+
+		if ( empty( $alloptions_keys ) ) {
+			$alloptions_keys = $this->adapter->get( $this->key( 'wp_memcached_alloptions_keys', $options_group ), $options_group );
+			$alloptions_keys = is_array( $alloptions_keys['value'] ) ? array_keys( $alloptions_keys['value'] ) : [];
+		}
+
+		if ( empty( $alloptions_keys ) ) {
+			// The key list is missing, so act as if the entire alloptions is missing.
+			return [
+				'value' => false,
+				'found' => false,
+			];
+		}
+
+		$cached_keys = [];
+		foreach ( $alloptions_keys as $option_name ) {
+			$cached_keys[ $option_name ] = $this->key( $option_name, $options_group );
+		}
+
+		$values = $this->adapter->get_multiple( array_values( $cached_keys ), $options_group );
+		$values = false === $values ? [] : $values;
+
+		$return = [];
+		foreach ( $cached_keys as $option_name => $cache_key ) {
+			if ( array_key_exists( $cache_key, $values ) ) {
+				/** @psalm-suppress MixedAssignment */
+				$return[ $option_name ] = $values[ $cache_key ];
+			}
+		}
+
+		return [
+			'value' => empty( $return ) ? false : $return,
+			'found' => ! empty( $return ),
+		];
+	}
+
+
+	/**
+	 * Set alloptions, deciding which individual values have changed and updating
+	 * as needed. Also keeping the "alloptions_keys" array up to date.
+	 *
+	 * TODO: If memcached remote is down, abort early somehow rather than try a few 100 set()s.
+	 *
+	 * @param mixed $new_alloptions The new set of alloptions data to be saved.
+	 * @return boolean True on success, false on failure.
+	 */
+	private function set_alloptions( $new_alloptions ) {
+		$options_group = 'options';
+		$forced_lookup = false;
+
+		// Falsey values for alloptions should never be cached.
+		if ( empty( $new_alloptions ) || ! is_array( $new_alloptions ) ) {
+			return false;
+		}
+
+		/** @psalm-var array<string, mixed> $new_alloptions */
+		$new_alloptions = $new_alloptions;
+
+		// Utilize the runtime cache if available, as that's ideal for seeing what this request has altered.
+		/** @psalm-var array<string, mixed>|false $current_alloptions */
+		$current_alloptions = $this->get( 'alloptions', $options_group );
+		if ( empty( $current_alloptions ) ) {
+			$forced_lookup = true;
+
+			// Else do a multiGet lookup for all the options names we were just given.
+			$fetched_options = $this->get_alloptions( array_keys( $new_alloptions ) );
+			/** @psalm-var array<string, mixed> $current_alloptions */
+			$current_alloptions = empty( $fetched_options['value'] ) ? [] : $fetched_options['value'];
+		}
+
+		// Update any new/changed values, and keep track of new key list.
+		$alloptions_keys = [];
+		/** @psalm-suppress MixedAssignment */
+		foreach ( $new_alloptions as $key => $value ) {
+			$alloptions_keys[ $key ] = true;
+
+			// TODO: Check how comparisons for objects will work
+			if ( ! isset( $current_alloptions[ $key ] ) || $current_alloptions[ $key ] !== $value ) {
+				$this->adapter->set( $this->key( $key, $options_group ), $options_group, $value, 0 );
+			}
+		}
+
+		// Delete any removed values.
+		/** @psalm-suppress MixedAssignment */
+		foreach ( $current_alloptions as $key => $value ) {
+			if ( ! isset( $new_alloptions[ $key ] ) ) {
+				$this->adapter->delete( $this->key( $key, $options_group ), $options_group );
+			}
+		}
+
+		// Update the cached key list if needed.
+		$count_changed = count( $current_alloptions ) !== count( $new_alloptions );
+		if ( $forced_lookup || $count_changed || ! empty( array_diff_key( $current_alloptions, $new_alloptions ) ) ) {
+			$set_result = $this->adapter->set( $this->key( 'wp_memcached_alloptions_keys', $options_group ), $options_group, $alloptions_keys, 0 );
+
+			if ( ! $set_result ) {
+				// At this point we'll mark the operation as failed if we couldn't communicate the new key list to memcached.
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Delete the alloptions cache key list.
+	 *
+	 * This triggers a fresh DB query to fetch alloptions on the next load,
+	 * and then we're able to calculate and look for any differences.
+	 *
+	 * Notably, this does not delete each individual key entry.
+	 * Individual keys in the "options" group need to be manually cache removed
+	 * if something is really meant to be purged from cache. As core does
+	 * not guarentee that autoloaded options do not end up in individual
+	 * cache keys.
+	 *
+	 * @return boolean True on success, false on failure.
+	 */
+	private function delete_alloptions() {
+		return $this->adapter->delete( $this->key( 'wp_memcached_alloptions_keys', 'options' ), 'options' );
+	}
 
 	/*
 	|--------------------------------------------------------------------------
