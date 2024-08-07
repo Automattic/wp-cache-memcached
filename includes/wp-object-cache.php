@@ -139,13 +139,13 @@ class WP_Object_Cache {
 		}
 
 		if ( $this->is_non_persistent_group( $group ) ) {
-			if ( isset( $this->cache[ $key ] ) ) {
+			if ( ! empty( $this->cache[ $key ][ 'found' ] ) ) {
 				return false;
 			}
 
 			$this->cache[ $key ] = [
 				'value' => $data,
-				'found' => false,
+				'found' => true,
 			];
 
 			return true;

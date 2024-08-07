@@ -853,6 +853,41 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 		$this->assertStringContainsString( $this->object_cache->blog_prefix, $this->object_cache->key( 'foo', 'non-global-group' ) );
 	}
 
+	public function test_non_persistent_themes_group() {
+		$key = 'theme-test-key';
+		$group = 'themes';
+		$data = [
+			'block_theme' => true,
+			'block_template_folders' => [
+				'wp_template' => 'templates',
+				'wp_template_part' => 'parts'
+			],
+			'headers' => [
+				'Name' => 'Test Theme',
+			],
+			'stylesheet' => 'test-theme',
+			'template' => 'test-theme'
+		];
+		$expiration = 300;
+
+		$this->object_cache->add_non_persistent_groups( 'themes' );
+
+		// Ensure 'themes' is in non-persistent groups
+		$this->assertContains( $group, $this->object_cache->no_mc_groups, "'themes' should be in non-persistent groups" );
+
+		// Step 1: Attempt to get the data before adding
+		$pre_get_result = $this->object_cache->get( $key, $group );
+		$this->assertFalse( $pre_get_result, 'Data should not be present before adding to non-persistent group' );
+
+		// Step 2: Attempt to add the data to cache
+		$add_result = $this->object_cache->add( $key, $data, $group, $expiration );
+		$this->assertTrue( $add_result, 'Adding data to non-persistent group should succeed' );
+
+		// Step 3: Attempt to get the data immediately after adding
+		$get_result = $this->object_cache->get( $key, $group );
+		$this->assertEquals( $data, $get_result, 'Data should be retrieved immediately after adding to non-persistent group' );
+	}
+
 	/*
 	|--------------------------------------------------------------------------
 	| Testing Utils
