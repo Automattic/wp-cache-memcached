@@ -53,6 +53,9 @@ class WP_Object_Cache {
 	 */
 	public array $cache = [];
 
+	/** @psalm-var array<string, bool> */
+	public array $non_persistent_set_keys = [];
+
 	// Stats tracking.
 	public array $stats                = [];
 	public array $group_ops            = [];
@@ -139,7 +142,7 @@ class WP_Object_Cache {
 		}
 
 		if ( $this->is_non_persistent_group( $group ) ) {
-			if ( isset( $this->cache[ $key ] ) ) {
+			if ( ! empty( $this->non_persistent_set_keys[ $key ] ) ) {
 				return false;
 			}
 
@@ -147,6 +150,7 @@ class WP_Object_Cache {
 				'value' => $data,
 				'found' => false,
 			];
+			$this->non_persistent_set_keys[ $key ] = true;
 
 			return true;
 		}
@@ -283,6 +287,7 @@ class WP_Object_Cache {
 				'value' => $data,
 				'found' => false,
 			];
+			$this->non_persistent_set_keys[ $key ] = true;
 
 			return true;
 		}
@@ -494,6 +499,7 @@ class WP_Object_Cache {
 		if ( $this->is_non_persistent_group( $group ) ) {
 			$result = isset( $this->cache[ $key ] );
 			unset( $this->cache[ $key ] );
+			unset( $this->non_persistent_set_keys[ $key ] );
 
 			return $result;
 		}
@@ -640,6 +646,7 @@ class WP_Object_Cache {
 	 */
 	public function flush() {
 		$this->cache = [];
+		$this->non_persistent_set_keys = [];
 
 		$flush_number = $this->new_flush_number();
 

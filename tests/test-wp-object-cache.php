@@ -86,7 +86,7 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 		self::assertFalse( $this->object_cache->add( 'key', $value, $group ) );
 
 		// Succeeds after removing from local cache because it never existed remotely.
-		unset( $this->object_cache->cache[ $cache_key ] );
+		wp_cache_delete( 'key', $group );
 		self::assertTrue( $this->object_cache->add( 'key', $value, $group ) );
 	}
 
