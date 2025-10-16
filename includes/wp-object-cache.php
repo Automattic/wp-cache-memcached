@@ -1019,7 +1019,7 @@ class WP_Object_Cache {
 	 */
 	public function salt_keys( $key_salt, $add_mc_prefix = false ) {
 		$key_salt = is_string( $key_salt ) && strlen( $key_salt ) ? $key_salt : '';
-		$key_salt = $add_mc_prefix ? $key_salt . '_mc' : '';
+		$key_salt = $add_mc_prefix ? $key_salt . '_mc' : $key_salt;
 
 		$this->key_salt = empty( $key_salt ) ? '' : $key_salt . ':';
 	}

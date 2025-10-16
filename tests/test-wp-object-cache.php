@@ -1023,6 +1023,20 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 		$this->assertFalse( $this->object_cache->replace( 'delete_me', 'after_delete_value', $group ) );
 	}
 
+	public function test_salt_keys() {
+		// Empty key salt
+		$this->object_cache->salt_keys( '', false );
+		self::assertEquals( '', $this->object_cache->key_salt );
+
+		// Key salt, no prefix
+		$this->object_cache->salt_keys( 'mysite', false );
+		self::assertEquals( 'mysite:', $this->object_cache->key_salt );
+
+		// Key salt and mc prefix
+		$this->object_cache->salt_keys( 'mysite', true );
+		self::assertEquals( 'mysite_mc:', $this->object_cache->key_salt );
+	}
+
 	/*
 	|--------------------------------------------------------------------------
 	| Testing Utils
