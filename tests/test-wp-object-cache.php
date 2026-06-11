@@ -855,6 +855,8 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 		// Preserves whitespace as a placeholder so user keys do not collide.
 		self::assertStringContainsString( 'user%SP%name', $this->object_cache->key( 'user name', 'users' ) );
 		self::assertNotSame( $this->object_cache->key( 'user name', 'users' ), $this->object_cache->key( 'username', 'users' ) );
+		self::assertNotSame( $this->object_cache->key( 'user name', 'users' ), $this->object_cache->key( 'user%SP%name', 'users' ) );
+		self::assertNotSame( $this->object_cache->key( 'user  name', 'users' ), $this->object_cache->key( 'user name', 'users' ) );
 	}
 
 	public function test_non_persistent_themes_group() {
