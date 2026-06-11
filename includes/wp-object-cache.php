@@ -936,7 +936,9 @@ class WP_Object_Cache {
 			$key
 		);
 
-		return preg_replace( '/\\s+/', '', $result );
+		// Spaces in cache keys are expected in the user bucket, but Memcache doesn't like them.
+		// Use %SP% as a placeholder so two user caches do not collide.
+		return preg_replace( '/\\s+/', '%SP%', $result );
 	}
 
 	/**

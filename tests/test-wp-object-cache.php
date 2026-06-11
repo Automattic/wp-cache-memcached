@@ -851,6 +851,10 @@ class Test_WP_Object_Cache extends WP_UnitTestCase {
 		// Contains blog prefix for non-global groups.
 		$this->object_cache->blog_prefix = 'blog_prefix'; // Mock for non-multisite tests.
 		$this->assertStringContainsString( $this->object_cache->blog_prefix, $this->object_cache->key( 'foo', 'non-global-group' ) );
+
+		// Preserves whitespace as a placeholder so user keys do not collide.
+		self::assertStringContainsString( 'user%SP%name', $this->object_cache->key( 'user name', 'users' ) );
+		self::assertNotSame( $this->object_cache->key( 'user name', 'users' ), $this->object_cache->key( 'username', 'users' ) );
 	}
 
 	public function test_non_persistent_themes_group() {
