@@ -55,6 +55,14 @@ function is_main_site($site_id = \null, $network_id = \null) {}
 function is_multisite() {}
 
 /**
+ * Temporarily suspends cache additions.
+ *
+ * @param bool|null $suspend Whether to suspend additions, or null to read the current setting.
+ * @return bool The current suspend setting.
+ */
+function wp_suspend_cache_addition($suspend = null) {}
+
+/**
  * Returns a comma-separated string or array of functions that have been called to get
  * to the current point in code.
  *
