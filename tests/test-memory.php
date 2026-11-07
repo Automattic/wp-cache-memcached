@@ -7,7 +7,7 @@ use Automattic\Memcached\Memcached_Adapter;
  */
 class Test_Cache_Memory extends PHPUnit\Framework\TestCase {
 
-	/** @param array<string|int, string> $values */
+	/** @param array<string|int, string|object> $values */
 	private function create_cache( array $values = [] ): WP_Object_Cache {
 		$adapter = $this->createStub( Memcached_Adapter::class );
 		$adapter->method( 'get_connections' )->willReturn( [] );
@@ -21,6 +21,12 @@ class Test_Cache_Memory extends PHPUnit\Framework\TestCase {
 			$mapped_values[ $cache->key( $key, 'default' ) ] = $value;
 		}
 		$adapter->method( 'get_multiple' )->willReturn( $mapped_values );
+		$adapter->method( 'get' )->willReturnCallback( static function ( string $key ) use ( $mapped_values ) {
+			return [
+				'value' => $mapped_values[ $key ] ?? false,
+				'found' => array_key_exists( $key, $mapped_values ),
+			];
+		} );
 
 		return $cache;
 	}
@@ -122,5 +128,34 @@ class Test_Cache_Memory extends PHPUnit\Framework\TestCase {
 
 		self::assertCount( 1, $cache->group_ops['default'] );
 		self::assertSame( 3000, $cache->stats['get_local'] );
+	}
+
+	/** @dataProvider remote_object_read_modes */
+	public function test_remote_objects_do_not_retain_caller_mutations( bool $bulk, bool $force ): void {
+		$cache = $this->create_cache( [ 'object' => (object) [ 'name' => 'stored' ] ] );
+		if ( $force ) {
+			$cache->cache[ $cache->key( 'object', 'default' ) ] = [
+				'value' => (object) [ 'name' => 'stale' ],
+				'found' => true,
+			];
+		}
+
+		$result = $bulk ? $cache->get_multiple( [ 'object' ], 'default', $force )['object'] : $cache->get( 'object', 'default', $force );
+		self::assertInstanceOf( stdClass::class, $result );
+		self::assertSame( 'stored', $result->name );
+		$result->temporary = str_repeat( 'x', 1024 * 1024 );
+		$result->name      = 'changed';
+		unset( $result );
+
+		self::assertEquals( (object) [ 'name' => 'stored' ], $cache->get( 'object' ) );
+	}
+
+	public function remote_object_read_modes(): array {
+		return [
+			'single cold'   => [ false, false ],
+			'single forced' => [ false, true ],
+			'bulk cold'     => [ true, false ],
+			'bulk forced'   => [ true, true ],
+		];
 	}
 }
