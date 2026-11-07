@@ -13,6 +13,7 @@ class Test_Cache_Memory extends PHPUnit\Framework\TestCase {
 		$adapter->method( 'get_connections' )->willReturn( [] );
 		$adapter->method( 'get_default_connections' )->willReturn( [] );
 		$adapter->method( 'get_connection_errors' )->willReturn( [] );
+		$adapter->method( 'add' )->willReturn( true );
 		$cache                                      = new WP_Object_Cache( $adapter );
 		$cache->flush_number[ $cache->blog_prefix ] = 1;
 
@@ -156,6 +157,45 @@ class Test_Cache_Memory extends PHPUnit\Framework\TestCase {
 			'single forced' => [ false, true ],
 			'bulk cold'     => [ true, false ],
 			'bulk forced'   => [ true, true ],
+		];
+	}
+
+	/** @dataProvider suspended_add_modes */
+	public function test_suspended_additions_do_not_retain_values( bool $bulk, string $group ): void {
+		$cache = $this->create_cache();
+		$cache->add_non_persistent_groups( [ 'runtime' ] );
+		$previous = wp_suspend_cache_addition();
+		try {
+			wp_suspend_cache_addition( true );
+			if ( $bulk ) {
+				$values = [
+					'one' => 'value',
+					'two' => 'value',
+				];
+				self::assertSame( [
+					'one' => false,
+					'two' => false,
+				], $cache->add_multiple( $values, $group ) );
+			} else {
+				self::assertFalse( $cache->add( 'one', 'value', $group ) );
+			}
+			self::assertSame( [], $cache->cache );
+			self::assertSame( 0, $cache->stats['add'] );
+
+			wp_suspend_cache_addition( false );
+			self::assertTrue( $cache->add( 'one', 'value', $group ) );
+			self::assertSame( 'value', $cache->get( 'one', $group ) );
+		} finally {
+			wp_suspend_cache_addition( $previous );
+		}
+	}
+
+	public function suspended_add_modes(): array {
+		return [
+			'single persistent' => [ false, 'default' ],
+			'single runtime'    => [ false, 'runtime' ],
+			'bulk persistent'   => [ true, 'default' ],
+			'bulk runtime'      => [ true, 'runtime' ],
 		];
 	}
 }
