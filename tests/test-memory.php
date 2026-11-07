@@ -84,4 +84,43 @@ class Test_Cache_Memory extends PHPUnit\Framework\TestCase {
 		self::assertFalse( $cache->get( 'absent', 'default', false, $found ) );
 		self::assertFalse( $found );
 	}
+
+	/**
+	 * @psalm-suppress MixedArgument The public statistics API exposes untyped arrays.
+	 * @psalm-suppress MixedArrayAccess
+	 */
+	public function test_operation_history_is_bounded_across_groups_without_losing_totals(): void {
+		$cache = $this->create_cache();
+		for ( $i = 0; $i < 3000; ++$i ) {
+			$cache->group_ops_stats( 'get', '1:wp_:key', 'group-' . $i, 8, 0.01 );
+		}
+
+		self::assertCount( 1000, $cache->group_ops['slow-ops'] );
+		self::assertCount( 1001, $cache->group_ops );
+		$stats = $cache->get_stats();
+		self::assertCount( 1000, $stats['operations']['get'] );
+		self::assertSame( 3000, $stats['operation_counts']['get'] );
+		self::assertSame( 3000, $stats['operation_counts']['slow-ops'] );
+		self::assertSame( 24000, $stats['totals']['size'] );
+		self::assertEqualsWithDelta( 30.0, $stats['totals']['query_time'], 0.000001 );
+
+		$cache->flush_runtime();
+		self::assertCount( 0, $cache->group_ops );
+		$cache->group_ops_stats( 'get', '1:wp_:key', 'after-reset', 8, 0.01 );
+		self::assertCount( 1, $cache->group_ops['after-reset'] );
+		self::assertCount( 1, $cache->group_ops['slow-ops'] );
+		self::assertSame( 3001, $cache->stats['get'] );
+	}
+
+	/** @psalm-suppress MixedArgument The public statistics API exposes untyped arrays. */
+	public function test_local_hits_do_not_consume_the_operation_history_budget(): void {
+		$cache = $this->create_cache();
+		for ( $i = 0; $i < 3000; ++$i ) {
+			$cache->group_ops_stats( 'get_local', '1:wp_:key', 'default' );
+		}
+		$cache->group_ops_stats( 'get', '1:wp_:key', 'default', 8, 0.001 );
+
+		self::assertCount( 1, $cache->group_ops['default'] );
+		self::assertSame( 3000, $cache->stats['get_local'] );
+	}
 }

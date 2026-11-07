@@ -661,8 +661,8 @@ class WP_Object_Cache {
 	 * @return true Always returns true.
 	 */
 	public function flush_runtime() {
-		$this->cache     = [];
-		$this->group_ops = [];
+		$this->cache = [];
+		$this->stats_helper->reset_operations();
 
 		return true;
 	}
