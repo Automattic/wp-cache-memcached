@@ -422,10 +422,15 @@ class WP_Object_Cache {
 			$elapsed = $this->timer_stop();
 
 			$values = false === $values ? [] : $values;
+			$size   = 0;
 			foreach ( $uncached_keys as $key => $cache_key ) {
 				$found = array_key_exists( $cache_key, $values );
 				/** @psalm-suppress MixedAssignment */
 				$value = $found ? $values[ $cache_key ] : false;
+				if ( $found ) {
+					// Measure one value at a time instead of serializing the entire batch.
+					$size += $this->get_data_size( $value );
+				}
 
 				/** @psalm-suppress MixedAssignment */
 				$return[ $key ]             = $value;
@@ -435,7 +440,7 @@ class WP_Object_Cache {
 				];
 			}
 
-			$this->group_ops_stats( 'get_multiple', array_values( $uncached_keys ), $group, $this->get_data_size( array_values( $values ) ), $elapsed );
+			$this->group_ops_stats( 'get_multiple', array_values( $uncached_keys ), $group, $size, $elapsed );
 		}
 
 		$this->cache = array_merge( $this->cache, $return_cache );
