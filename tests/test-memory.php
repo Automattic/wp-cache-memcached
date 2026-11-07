@@ -46,4 +46,42 @@ class Test_Cache_Memory extends PHPUnit\Framework\TestCase {
 		self::assertLessThan( 8 * 1024 * 1024, $extra, 'Bulk-read bookkeeping should not duplicate the 32 MiB payload.' );
 		self::assertSame( 32 * 1024 * 1024, $cache->size_total );
 	}
+
+	public function test_small_bulk_read_does_not_copy_the_existing_runtime_cache(): void {
+		if ( ! function_exists( 'memory_reset_peak_usage' ) ) {
+			$this->markTestSkipped( 'Measuring an isolated peak requires PHP 8.2.' );
+		}
+
+		$cache = $this->create_cache( [
+			'fresh' => 'new',
+			'stale' => 'remote',
+		] );
+		for ( $i = 0; $i < 50000; ++$i ) {
+			$cache->cache[ $cache->key( $i, 'default' ) ] = [
+				'value' => 'existing',
+				'found' => true,
+			];
+		}
+		$cache->cache[ $cache->key( 'stale', 'default' ) ] = [
+			'value' => 'old',
+			'found' => true,
+		];
+
+		memory_reset_peak_usage();
+		$before  = memory_get_usage();
+		$results = $cache->get_multiple( [ 'stale', 'fresh', 'absent' ], 'default', true );
+		$extra   = memory_get_peak_usage() - $before;
+
+		self::assertLessThan( 1024 * 1024, $extra, 'Adding three entries should not copy the existing 50,000-entry cache table.' );
+		self::assertSame( [
+			'stale'  => 'remote',
+			'fresh'  => 'new',
+			'absent' => false,
+		], $results );
+		self::assertSame( 'existing', $cache->get( 0 ) );
+		self::assertSame( 'remote', $cache->get( 'stale' ) );
+		self::assertSame( 'new', $cache->get( 'fresh' ) );
+		self::assertFalse( $cache->get( 'absent', 'default', false, $found ) );
+		self::assertFalse( $found );
+	}
 }

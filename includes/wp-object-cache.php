@@ -392,7 +392,6 @@ class WP_Object_Cache {
 	public function get_multiple( $keys, $group = 'default', $force = false ) {
 		$uncached_keys = [];
 		$return        = [];
-		$return_cache  = [];
 
 		if ( $force && $this->is_non_persistent_group( $group ) ) {
 			// There's nothing to "force" retrieve.
@@ -433,8 +432,8 @@ class WP_Object_Cache {
 				}
 
 				/** @psalm-suppress MixedAssignment */
-				$return[ $key ]             = $value;
-				$return_cache[ $cache_key ] = [
+				$return[ $key ]            = $value;
+				$this->cache[ $cache_key ] = [
 					'value' => $value,
 					'found' => $found,
 				];
@@ -443,7 +442,6 @@ class WP_Object_Cache {
 			$this->group_ops_stats( 'get_multiple', array_values( $uncached_keys ), $group, $size, $elapsed );
 		}
 
-		$this->cache = array_merge( $this->cache, $return_cache );
 		return $return;
 	}
 
