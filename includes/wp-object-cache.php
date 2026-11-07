@@ -380,7 +380,7 @@ class WP_Object_Cache {
 			$this->group_ops_stats( 'get', $key, $group, null, $elapsed, 'not_in_memcache' );
 		}
 
-		return is_object( $result['value'] ) ? clone $result['value'] : $result['value'];
+		return $result['value'];
 	}
 
 	/**
@@ -436,7 +436,7 @@ class WP_Object_Cache {
 				}
 
 				/** @psalm-suppress MixedAssignment */
-				$return[ $key ]            = is_object( $value ) ? clone $value : $value;
+				$return[ $key ]            = $value;
 				$this->cache[ $cache_key ] = [
 					'value' => $value,
 					'found' => $found,
