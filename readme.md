@@ -22,6 +22,13 @@ To additionally start using the Memcached php extension instead:
 
 This will result in effectively a cache flush, after which behavior will resume per usual (though hopefully with better performance and consistency).
 
+## Statistics
+
+Detailed history records the first 1,000 remote cache operations, including their
+associated slow-operation backtraces. Aggregate operation counts, time, and byte
+estimates continue to include every operation. `wp_cache_flush_runtime()` clears
+the detailed history and resets its recording budget along with the local cache.
+
 ## Development
 
 ```

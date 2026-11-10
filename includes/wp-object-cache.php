@@ -132,6 +132,10 @@ class WP_Object_Cache {
 	 * @return bool True on success, false on failure or if cache key and group already exist.
 	 */
 	public function add( $key, $data, $group = 'default', $expire = 0 ) {
+		if ( wp_suspend_cache_addition() ) {
+			return false;
+		}
+
 		$key = $this->key( $key, $group );
 
 		if ( is_object( $data ) ) {
@@ -392,7 +396,6 @@ class WP_Object_Cache {
 	public function get_multiple( $keys, $group = 'default', $force = false ) {
 		$uncached_keys = [];
 		$return        = [];
-		$return_cache  = [];
 
 		if ( $force && $this->is_non_persistent_group( $group ) ) {
 			// There's nothing to "force" retrieve.
@@ -422,23 +425,27 @@ class WP_Object_Cache {
 			$elapsed = $this->timer_stop();
 
 			$values = false === $values ? [] : $values;
+			$size   = 0;
 			foreach ( $uncached_keys as $key => $cache_key ) {
 				$found = array_key_exists( $cache_key, $values );
 				/** @psalm-suppress MixedAssignment */
 				$value = $found ? $values[ $cache_key ] : false;
+				if ( $found ) {
+					// Measure one value at a time instead of serializing the entire batch.
+					$size += $this->get_data_size( $value );
+				}
 
 				/** @psalm-suppress MixedAssignment */
-				$return[ $key ]             = $value;
-				$return_cache[ $cache_key ] = [
+				$return[ $key ]            = $value;
+				$this->cache[ $cache_key ] = [
 					'value' => $value,
 					'found' => $found,
 				];
 			}
 
-			$this->group_ops_stats( 'get_multiple', array_values( $uncached_keys ), $group, $this->get_data_size( array_values( $values ) ), $elapsed );
+			$this->group_ops_stats( 'get_multiple', array_values( $uncached_keys ), $group, $size, $elapsed );
 		}
 
-		$this->cache = array_merge( $this->cache, $return_cache );
 		return $return;
 	}
 
@@ -658,8 +665,8 @@ class WP_Object_Cache {
 	 * @return true Always returns true.
 	 */
 	public function flush_runtime() {
-		$this->cache     = [];
-		$this->group_ops = [];
+		$this->cache = [];
+		$this->stats_helper->reset_operations();
 
 		return true;
 	}

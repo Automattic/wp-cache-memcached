@@ -9,6 +9,10 @@ namespace Automattic\Memcached;
  * we can cleanup the data structures internally here.
 */
 class Stats {
+	private const MAX_RECORDED_OPERATIONS = 1000;
+
+	private int $recorded_operations = 0;
+
 	/** @var array<string,int> */
 	public array $stats = [];
 
@@ -74,6 +78,17 @@ class Stats {
 			$this->time_total += $time;
 		}
 
+		$is_slow = $time > $this->slow_op_microseconds && 'get_multi' !== $op;
+		if ( $is_slow ) {
+			$this->increment_stat( 'slow-ops' );
+		}
+
+		// Keep totals for every operation, but bound retained keys and backtraces.
+		if ( $this->recorded_operations >= self::MAX_RECORDED_OPERATIONS ) {
+			return;
+		}
+		++$this->recorded_operations;
+
 		$keys = $this->strip_memcached_keys( $keys );
 
 		// Callers can pass a null group, which is deprecated as an array offset since PHP 8.5.
@@ -81,15 +96,21 @@ class Stats {
 			$group = 'default';
 		}
 
-		if ( $time > $this->slow_op_microseconds && 'get_multi' !== $op ) {
-			$this->increment_stat( 'slow-ops' );
-
+		if ( $is_slow ) {
 			/** @psalm-var string|null $backtrace */
 			$backtrace                     = function_exists( 'wp_debug_backtrace_summary' ) ? wp_debug_backtrace_summary() : null; // phpcs:ignore
 			$this->group_ops['slow-ops'][] = array( $op, $keys, $size, $time, $comment, $group, $backtrace );
 		}
 
 		$this->group_ops[ $group ][] = array( $op, $keys, $size, $time, $comment );
+	}
+
+	/**
+	 * Clear detailed history and its recording budget, preserving aggregate totals.
+	 */
+	public function reset_operations(): void {
+		$this->group_ops           = [];
+		$this->recorded_operations = 0;
 	}
 
 	/**
