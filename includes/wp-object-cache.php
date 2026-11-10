@@ -10,7 +10,7 @@ use Automattic\Memcached\Stats;
 class WP_Object_Cache {
 	public string $flush_group        = 'WP_Object_Cache';
 	public string $global_flush_group = 'WP_Object_Cache_global';
-	public string $flush_key          = 'flush_number_v4';
+	public string $flush_key          = 'flush_number_v5';
 
 	/**
 	 * Keep track of flush numbers.
@@ -938,8 +938,9 @@ class WP_Object_Cache {
 		);
 
 		// Spaces in cache keys are expected in the user bucket, but Memcache doesn't like them.
-		// Use %SP% as a placeholder so two user caches do not collide.
-		return preg_replace( '/\\s+/', '%SP%', $result );
+		// Escape literal percent signs first so user keys cannot collide with the %SP% marker.
+		$result = str_replace( '%', '%25', $result );
+		return preg_replace( '/\\s/', '%SP%', $result );
 	}
 
 	/**
